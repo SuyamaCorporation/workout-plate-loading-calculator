@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barbell Plate Loading Calculator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .plate { display: inline-block; border-radius: 4px; vertical-align: middle; transition: all 0.2s; }
+  .plate-label { font-size: 0.6rem; writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); color: white; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4">
+<div class="max-w-3xl mx-auto">
+  <h1 class="text-3xl font-bold text-center text-gray-800 mb-2">Barbell Plate Loading Calculator</h1>
+  <p class="text-center text-gray-500 mb-6 text-sm">Find the exact plates needed for your target weight</p>
+
+  <!-- Unit + Barbell -->
+  <div class="bg-white rounded-xl shadow p-6 mb-6">
+    <div class="flex flex-wrap gap-6 items-end mb-4">
+      <div>
+        <span class="block text-sm font-semibold text-gray-700 mb-2">Unit</span>
+        <div class="flex gap-3">
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="unit" value="kg" checked class="accent-indigo-500" aria-label="Kilograms"> kg
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="unit" value="lb" class="accent-indigo-500" aria-label="Pounds"> lb
+          </label>
+        </div>
+      </div>
+      <div>
+        <label for="barbell-weight" class="block text-sm font-semibold text-gray-700 mb-1">Barbell Weight</label>
+        <input id="barbell-weight" type="number" min="0" step="0.5" value="20" class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" aria-label="Barbell weight">
+      </div>
+      <div>
+        <label for="target-weight" class="block text-sm font-semibold text-gray-700 mb-1">Target Weight</label>
+        <input id="target-weight" type="number" min="0" step="0.5" value="100" class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" aria-label="Target total weight">
+      </div>
+    </div>
+
+    <!-- Common lifts -->
+    <div>
+      <span class="text-sm font-semibold text-gray-700 mb-2 block">Quick Select (kg)</span>
+      <div id="quick-select-buttons" class="flex flex-wrap gap-2"></div>
+    </div>
+  </div>
+
+  <!-- Available plates -->
+  <div class="bg-white rounded-xl shadow p-6 mb-6">
+    <h2 class="font-bold text-gray-700 mb-3">Available Plates</h2>
+    <div id="plate-checkboxes" class="grid grid-cols-3 sm:grid-cols-6 gap-3"></div>
+  </div>
+
+  <!-- Result -->
+  <div id="result-section" class="bg-white rounded-xl shadow p-6 mb-6 hidden">
+    <h2 class="font-bold text-gray-700 mb-4">Loading Result</h2>
+
+    <!-- Alert if not exact -->
+    <div id="not-exact-alert" class="hidden mb-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3 text-sm"></div>
+
+    <!-- Summary -->
+    <div class="flex flex-wrap gap-4 mb-6 text-sm">
+      <div class="bg-indigo-50 rounded-lg px-4 py-2 text-center">
+        <div class="text-xs text-indigo-500">Target</div>
+        <div id="res-target" class="font-bold text-indigo-700 text-lg"></div>
+      </div>
+      <div class="bg-emerald-50 rounded-lg px-4 py-2 text-center">
+        <div class="text-xs text-emerald-500">Achieved</div>
+        <div id="res-achieved" class="font-bold text-emerald-700 text-lg"></div>
+      </div>
+      <div class="bg-gray-50 rounded-lg px-4 py-2 text-center">
+        <div class="text-xs text-gray-500">Per Side</div>
+        <div id="res-per-side" class="font-bold text-gray-700 text-lg"></div>
+      </div>
+      <div class="bg-gray-50 rounded-lg px-4 py-2 text-center">
+        <div class="text-xs text-gray-500">Barbell</div>
+        <div id="res-barbell" class="font-bold text-gray-700 text-lg"></div>
+      </div>
+    </div>
+
+    <!-- Plates per side list -->
+    <div class="mb-6">
+      <h3 class="text-sm font-semibold text-gray-600 mb-2">Plates Per Side</h3>
+      <div id="plates-per-side" class="flex flex-wrap gap-2 min-h-[2rem]"></div>
+      <p id="no-plates-text" class="text-gray-400 text-sm hidden">No plates needed — barbell weight equals target.</p>
+    </div>
+
+    <!-- Barbell diagram -->
+    <div class="mb-4">
+      <h3 class="text-sm font-semibold text-gray-600 mb-2">Visual Diagram</h3>
+      <div class="overflow-x-auto">
+        <div id="barbell-diagram" class="flex items-center justify-center py-4 min-w-max mx-auto"></div>
+      </div>
+    </div>
+
+    <!-- Save favourite -->
+    <button onclick="saveFavourite()" class="px-4 py-2 bg-yellow-400 text-white rounded-lg text-sm font-medium hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-300" aria-label="Save this loading as favourite">Save as Favourite</button>
+  </div>
+
+  <!-- Favourites -->
+  <div id="fav-section" class="bg-white rounded-xl shadow p-6 hidden">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-bold text-gray-700">Saved Favourites</h2>
+    </div>
+    <div id="fav-list" class="space-y-2"></div>
+  </div>
+</div>
+
+<script>
+const PLATE_SIZES_KG = [20, 15, 10, 5, 2.5, 1.25];
+const PLATE_SIZES_LB = [45, 35, 25, 10, 5, 2.5, 1.25];
+const PLATE_COLORS_KG = {20:'#dc2626',15:'#f59e0b',10:'#16a34a',5:'#1d4ed8',2.5:'#9333ea',1.25:'#6b7280'};
+const PLATE_COLORS_LB = {45:'#dc2626',35:'#f59e0b',25:'#16a34a',10:'#1d4ed8',5:'#9333ea',2.5:'#6b7280',1.25:'#d1d5db'};
+
+const COMMON_LIFTS_KG = [
+  {name:'Squat 60',target:60},{name:'Squat 100',target:100},{name:'Squat 140',target:140},
+  {name:'Bench 60',target:60},{name:'Bench 80',target:80},{name:'Bench 100',target:100},
+  {name:'Deadlift 100',target:100},{name:'Deadlift 140',target:140},{name:'Deadlift 180',target:180},
+];
+const COMMON_LIFTS_LB = [
+  {name:'Squat 135',target:135},{name:'Squat 225',target:225},{name:'Squat 315',target:315},
+  {name:'Bench 135',target:135},{name:'Bench 185',target:185},{name:'Bench 225',target:225},
+  {name:'Deadlift 225',target:225},{name:'Deadlift 315',target:315},{name:'Deadlift 405',target:405},
+];
+
+let favourites = [];
+let currentResult = null;
+
+function getUnit() { return document.querySelector('input[name="unit"]:checked').value; }
+function getPlateSizes() { return getUnit() === 'kg' ? PLATE_SIZES_KG : PLATE_SIZES_LB; }
+function getPlateColors() { return getUnit() === 'kg' ? PLATE_COLORS_KG : PLATE_COLORS_LB; }
+
+function loadStorage() {
+  try {
+    const f = localStorage.getItem('plate_favs');
+    if (f) favourites = JSON.parse(f);
+  } catch(e) {}
+}
+
+function saveStorage() {
+  try { localStorage.setItem('plate_favs', JSON.stringify(favourites)); } catch(e) {}
+}
+
+function buildUI() {
+  const unit = getUnit();
+  const sizes = getPlateSizes();
+  const colors = getPlateColors();
+
+  // Checkboxes
+  const cb = document.getElementById('plate-checkboxes');
+  cb.innerHTML = '';
+  sizes.forEach(s => {
+    const label = document.createElement('label');
+    label.className = 'flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 text-sm font-medium';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = s;
+    input.id = 'plate-' + s;
+    input.checked = true;
+    input.className = 'accent-indigo-500 w-4 h-4';
+    input.setAttribute('aria-label', s + ' ' + unit + ' plate');
+    input.addEventListener('change', compute);
+    const dot = document.createElement('span');
+    dot.style.background = colors[s];
+    dot.className = 'w-4 h-4 rounded-sm inline-block flex-shrink-0';
+    const txt = document.createTextNode(s + ' ' + unit);
+    label.appendChild(input);
+    label.appendChild(dot);
+    label.appendChild(txt);
+    cb.appendChild(label);
+  });
+
+  // Quick select
+  const qs = document.getElementById('quick-select-buttons');
+  qs.innerHTML = '';
+  const lifts = unit === 'kg' ? COMMON_LIFTS_KG : COMMON_LIFTS_LB;
+  lifts.forEach(l => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'px-3 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-medium hover:bg-indigo-100 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300';
+    btn.textContent = l.name;
+    btn.setAttribute('aria-label', 'Set target to ' + l.target + ' ' + unit);
+    btn.onclick = () => {
+      document.getElementById('target-weight').value = l.target;
+      compute();
+    };
+    qs.appendChild(btn);
+  });
+}
+
+function getAvailablePlates() {
+  const sizes = getPlateSizes();
+  return sizes.filter(s => {
+    const el = document.getElementById('plate-' + s);
+    return el && el.checked;
+  });
+}
+
+function greedyPlates(perSide, available) {
+  const sorted = [...available].sort((a, b) => b - a);
+  let remaining = Math.round(perSide * 1000) / 1000;
+  const result = {};
+  sorted.forEach(p => {
+    const count = Math.floor(Math.round(remaining * 1000) / Math.round(p * 1000));
+    if (count > 0) {
+      result[p] = count;
+      remaining = Math.round((remaining - p * count) * 1000) / 1000;
+    }
+  });
+  return { plates: result, remainder: remaining };
+}
+
+function compute() {
+  const unit = getUnit();
+  const barbell = parseFloat(document.getElementById('barbell-weight').value) || 0;
+  const target = parseFloat(document.getElementById('target-weight').value) || 0;
+  const available = getAvailablePlates();
+
+  const perSide = (target - barbell) / 2;
+
+  const resultSection = document.getElementById('result-section');
+  const alertEl = document.getElementById('not-exact-alert');
+
+  if (target <= 0) { resultSection.classList.add('hidden'); return; }
+  resultSection.classList.remove('hidden');
+
+  document.getElementById('res-target').textContent = target + ' ' + unit;
+  document.getElementById('res-barbell').textContent = barbell + ' ' + unit;
+
+  if (perSide < 0) {
+    alertEl.textContent = 'Target weight is less than barbell weight.';
+    alertEl.classList.remove('hidden');
+    document.getElementById('res-achieved').textContent = '—';
+    document.getElementById('res-per-side').textContent = '—';
+    document.getElementById('plates-per-side').innerHTML = '';
+    document.getElementById('barbell-diagram').innerHTML = '';
+    currentResult = null;
+    return;
+  }
+
+  const { plates, remainder } = greedyPlates(perSide, available);
+  const achieved = perSide === 0 ? barbell : barbell + 2 * (perSide - remainder);
+
+  const isExact = Math.abs(remainder) < 0.01;
+  if (!isExact) {
+    alertEl.textContent = 'Exact weight not achievable with selected plates. Nearest: ' +
+      achieved.toFixed(2) + ' ' + unit + ' (using ' + (perSide - remainder).toFixed(2) + ' ' + unit + ' per side).';
+    alertEl.classList.remove('hidden');
+  } else {
+    alertEl.classList.add('hidden');
+  }
+
+  document.getElementById('res-achieved').textContent = achieved.toFixed(2) + ' ' + unit;
+  document.getElementById('res-per-side').textContent = (perSide - remainder).toFixed(2) + ' ' + unit;
+
+  // Plates list
+  const pps = document.getElementById('plates-per-side');
+  pps.innerHTML = '';
+  const noPlates = document.getElementById('no-plates-text');
+  const sortedPlateKeys = Object.keys(plates).map(Number).sort((a,b)=>b-a);
+  if (sortedPlateKeys.length === 0) {
+    noPlates.classList.remove('hidden');
+  } else {
+    noPlates.classList.add('hidden');
+    const colors = getPlateColors();
+    sortedPlateKeys.forEach(p => {
+      const cnt = plates[p];
+      const badge = document.createElement('div');
+      badge.className = 'flex items-center gap-1 px-3 py-1 rounded-lg text-white text-sm font-bold';
+      badge.style.background = colors[p] || '#6b7280';
+      badge.textContent = cnt + ' × ' + p + ' ' + unit;
+      pps.appendChild(badge);
+    });
+  }
+
+  // Barbell diagram
+  renderDiagram(plates, barbell, unit);
+
+  currentResult = { target, barbell, achieved, perSide: perSide - remainder, plates, unit };
+}
+
+function renderDiagram(plates, barbell, unit) {
+  const diag = document.getElementById('barbell-diagram');
+  diag.innerHTML = '';
+  const colors = getPlateColors();
+  const sortedKeys = Object.keys(plates).map(Number).sort((a,b)=>b-a);
+
+  // Build plate array for one side (expanded)
+  const singleSide = [];
+  sortedKeys.forEach(p => {
+    for (let i = 0; i < plates[p]; i++) singleSide.push(p);
+  });
+
+  // Max plate for height scaling
+  const maxP = getPlateSizes()[0];
+
+  function makePlateEl(p) {
+    const color = colors[p] || '#9ca3af';
+    const heightFactor = Math.sqrt(p / maxP);
+    const h = Math.max(24, Math.round(80 * heightFactor));
+    const w = Math.max(12, Math.round(18 * heightFactor));
+    const el = document.createElement('div');
+    el.className = 'plate flex items-center justify-center';
+    el.style.cssText = `width:${w}px;height:${h}px;background:${color};border:1px solid rgba(0,0,0,0.2);`;
+    el.setAttribute('title', p + ' ' + unit);
+    const label = document.createElement('span');
+    label.className = 'plate-label';
+    label.style.fontSize = '0.5rem';
+    label.textContent = p;
+    el.appendChild(label);
+    return el;
+  }
+
+  // Left side (reversed)
+  const leftWrapper = document.createElement('div');
+  leftWrapper.className = 'flex items-center';
+  [...singleSide].reverse().forEach(p => leftWrapper.appendChild(makePlateEl(p)));
+
+  // Barbell bar
+  const barEl = document.createElement('div');
+  barEl.className = 'flex items-center justify-center';
+  barEl.style.cssText = 'width:60px;height:16px;background:#94a3b8;border-radius:2px;position:relative;';
+  const bbLabel = document.createElement('span');
+  bbLabel.style.cssText = 'font-size:0.6rem;color:white;font-weight:bold;';
+  bbLabel.textContent = barbell + unit;
+  barEl.appendChild(bbLabel);
+
+  // Right side
+  const rightWrapper = document.createElement('div');
+  rightWrapper.className = 'flex items-center';
+  singleSide.forEach(p => rightWrapper.appendChild(makePlateEl(p)));
+
+  diag.appendChild(leftWrapper);
+  diag.appendChild(barEl);
+  diag.appendChild(rightWrapper);
+
+  if (singleSide.length === 0) {
+    diag.textContent = barbell + ' ' + unit + ' barbell only';
+    diag.className += ' text-gray-500 text-sm';
+  }
+}
+
+function saveFavourite() {
+  if (!currentResult) return;
+  const label = currentResult.target + ' ' + currentResult.unit + ' (' + currentResult.achieved.toFixed(2) + ' achieved)';
+  favourites.unshift({ id: Date.now(), label, ...currentResult });
+  if (favourites.length > 10) favourites.pop();
+  saveStorage();
+  renderFavourites();
+}
+
+function loadFavourite(fav) {
+  document.querySelector('input[name="unit"][value="' + fav.unit + '"]').checked = true;
+  buildUI();
+  document.getElementById('barbell-weight').value = fav.barbell;
+  document.getElementById('target-weight').value = fav.target;
+  compute();
+}
+
+function deleteFavourite(id) {
+  favourites = favourites.filter(f => f.id !== id);
+  saveStorage();
+  renderFavourites();
+}
+
+function renderFavourites() {
+  const section = document.getElementById('fav-section');
+  const list = document.getElementById('fav-list');
+  list.innerHTML = '';
+  if (favourites.length === 0) { section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
+  favourites.forEach(fav => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center justify-between bg-gray-50 rounded-lg p-3 text-sm';
+    const label = document.createElement('span');
+    label.className = 'font-medium text-gray-700';
+    label.textContent = fav.label;
+    const btns = document.createElement('div');
+    btns.className = 'flex gap-2';
+    const load = document.createElement('button');
+    load.className = 'text-indigo-600 hover:text-indigo-800 text-xs px-2 py-1 rounded hover:bg-indigo-50 focus:outline-none focus:ring-1 focus:ring-indigo-300';
+    load.textContent = 'Load';
+    load.setAttribute('aria-label', 'Load favourite ' + fav.label);
+    load.onclick = () => loadFavourite(fav);
+    const del = document.createElement('button');
+    del.className = 'text-red-400 hover:text-red-600 text-xs px-2 py-1 rounded hover:bg-red-50 focus:outline-none focus:ring-1 focus:ring-red-300';
+    del.textContent = 'Delete';
+    del.setAttribute('aria-label', 'Delete favourite ' + fav.label);
+    del.onclick = () => deleteFavourite(fav.id);
+    btns.appendChild(load);
+    btns.appendChild(del);
+    row.appendChild(label);
+    row.appendChild(btns);
+    list.appendChild(row);
+  });
+}
+
+// Event listeners
+document.querySelectorAll('input[name="unit"]').forEach(el => el.addEventListener('change', () => {
+  const unit = getUnit();
+  document.getElementById('barbell-weight').value = unit === 'kg' ? 20 : 45;
+  document.getElementById('target-weight').value = unit === 'kg' ? 100 : 225;
+  buildUI();
+  compute();
+}));
+document.getElementById('barbell-weight').addEventListener('input', compute);
+document.getElementById('target-weight').addEventListener('input', compute);
+
+loadStorage();
+buildUI();
+renderFavourites();
+compute();
+</script>
+</body>
+</html>
